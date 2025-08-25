@@ -38,6 +38,28 @@ def test_create_daily():
 
     print("✅ Conexión exitosa")
 
+    # Get available trackers
+    print("\n🏷️  Obteniendo trackers disponibles...")
+    trackers = redmine_service.get_trackers()
+
+    if trackers:
+        print(f"✅ Encontrados {len(trackers)} trackers:")
+        for tracker in trackers:
+            print(f"  • {tracker['name']} (ID: {tracker['id']})")
+    else:
+        print("❌ No se encontraron trackers")
+
+    # Get available issue statuses
+    print("\n📊 Obteniendo estados disponibles...")
+    statuses = redmine_service.get_issue_statuses()
+
+    if statuses:
+        print(f"✅ Encontrados {len(statuses)} estados:")
+        for status in statuses:
+            print(f"  • {status['name']} (ID: {status['id']})")
+    else:
+        print("❌ No se encontraron estados")
+
     # Get available projects
     print("\n📋 Obteniendo proyectos disponibles...")
     projects = redmine_service.get_projects()
@@ -123,6 +145,58 @@ def test_create_daily():
             print(f"   Comentarios: {time_entry['comments']}")
         else:
             print("❌ Error al loguear tiempo")
+
+        # Test status update
+        print(f"\n🔄 Probando cambio de estado...")
+
+        status_change = (
+            input(
+                "¿Quieres cambiar el estado de la tarea? (s/n) o presiona Enter para 's': "
+            )
+            .strip()
+            .lower()
+        )
+
+        if status_change in ("", "s", "si", "sí", "y", "yes"):
+            print("\nEstados disponibles:")
+            for i, status in enumerate(statuses):
+                print(f"  {i+1}. {status['name']}")
+
+            status_choice = input(
+                "\nSelecciona el número del estado (o escribe el nombre, ejemplo: 'IN PROGRESS'): "
+            ).strip()
+
+            try:
+                # Try to parse as number first
+                if status_choice.isdigit():
+                    status_index = int(status_choice) - 1
+                    if 0 <= status_index < len(statuses):
+                        status_name = statuses[status_index]["name"]
+                    else:
+                        print("❌ Número de estado inválido, usando 'IN PROGRESS'")
+                        status_name = "IN PROGRESS"
+                else:
+                    # Use the provided text as status name
+                    status_name = status_choice if status_choice else "IN PROGRESS"
+
+                updated_task = redmine_service.update_issue_status(
+                    issue_id=task_data["id"], status_name=status_name
+                )
+
+                if updated_task:
+                    print("✅ Estado actualizado exitosamente!")
+                    print(
+                        f"   Estado anterior: {task_data.get('status_name', 'Unknown')}"
+                    )
+                    print(
+                        f"   Estado nuevo: {updated_task['status_name']} (ID: {updated_task['status_id']})"
+                    )
+                    print(f"   Fecha actualización: {updated_task['updated_on']}")
+                else:
+                    print("❌ Error al cambiar el estado")
+
+            except Exception as e:
+                print(f"❌ Error al cambiar el estado: {e}")
 
         # Show final URL
         from app.config import settings

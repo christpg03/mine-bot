@@ -134,7 +134,11 @@ class RedmineService:
             return None
 
     def create_daily_task(
-        self, project_id: int, team_name: str, daily_date: Optional[datetime] = None
+        self,
+        project_id: int,
+        team_name: str,
+        daily_date: Optional[datetime] = None,
+        estimated_time: Optional[float] = None,
     ) -> Optional[Dict]:
         """
         Create a daily task in Redmine
@@ -143,6 +147,7 @@ class RedmineService:
             project_id (int): Project ID where the task will be created
             team_name (str): Team name for the task subject
             daily_date (datetime, optional): Date for the daily. If None, uses current date
+            estimated_time (float, optional): Estimated time in hours for the task
 
         Returns:
             Optional[Dict]: Created task data or None if failed
@@ -171,6 +176,10 @@ class RedmineService:
                 "start_date": daily_date.date(),
                 "due_date": daily_date.date(),
             }
+
+            # Add estimated time if provided
+            if estimated_time is not None:
+                issue_data["estimated_hours"] = estimated_time
 
             issue = self.redmine.issue.create(**issue_data)
 
@@ -317,113 +326,60 @@ class RedmineService:
             logger.error(f"Error getting status ID for '{status_name}': {e}")
             return None
 
-    def get_time_entry_activities(self) -> List[Dict]:
+    def update_issue_status(self, issue_id: int, status_name: str) -> Optional[Dict]:
         """
-        Get all available time entry activities
+        Update the status of an issue in Redmine
+
+        Args:
+            issue_id (int): Issue ID to update
+            status_name (str): Name of the status to set (e.g., 'IN PROGRESS', 'Closed', etc.)
 
         Returns:
-            List[Dict]: List of activities with id and name
+            Optional[Dict]: Updated issue data or None if failed
         """
         try:
-            activities = []
-            redmine_activities = self.redmine.enumeration.filter(
-                resource="time_entry_activities"
+            # Get the status ID by name
+            status_id = self.get_status_id_by_name(status_name)
+            if status_id is None:
+                logger.error(f"Status '{status_name}' not found")
+                return None
+
+            # Get the current issue to verify it exists
+            try:
+                issue = self.redmine.issue.get(issue_id)
+            except ResourceNotFoundError:
+                logger.error(f"Issue with ID {issue_id} not found")
+                return None
+
+            # Update the issue status
+            issue.status_id = status_id
+            issue.save()
+
+            logger.info(
+                f"Issue {issue_id} status updated to '{status_name}' (ID: {status_id})"
             )
 
-            for activity in redmine_activities:
-                activities.append({"id": activity.id, "name": activity.name})
+            # Return updated issue data
+            updated_issue = self.redmine.issue.get(issue_id)
+            return {
+                "id": updated_issue.id,
+                "subject": updated_issue.subject,
+                "project_id": updated_issue.project.id,
+                "tracker_id": updated_issue.tracker.id,
+                "status_id": updated_issue.status.id,
+                "status_name": updated_issue.status.name,
+                "assigned_to_id": (
+                    updated_issue.assigned_to.id
+                    if hasattr(updated_issue, "assigned_to")
+                    else None
+                ),
+                "start_date": str(getattr(updated_issue, "start_date", "")),
+                "due_date": str(getattr(updated_issue, "due_date", "")),
+                "updated_on": str(updated_issue.updated_on),
+            }
 
-            logger.info(f"Retrieved {len(activities)} time entry activities")
-            return activities
-
-        except (AuthError, Exception) as e:
-            logger.error(f"Error retrieving time entry activities: {e}")
-            return []
-
-    def get_activity_id_by_name(self, activity_name: str) -> Optional[int]:
-        """
-        Get activity ID by name
-
-        Args:
-            activity_name (str): Name of the activity
-
-        Returns:
-            Optional[int]: Activity ID or None if not found
-        """
-        try:
-            activities = self.get_time_entry_activities()
-            for activity in activities:
-                if activity["name"].lower() == activity_name.lower():
-                    return activity["id"]
-
-            logger.warning(f"Activity '{activity_name}' not found")
+        except (ResourceNotFoundError, AuthError, Exception) as e:
+            logger.error(
+                f"Error updating status for issue {issue_id} to '{status_name}': {e}"
+            )
             return None
-
-        except Exception as e:
-            logger.error(f"Error getting activity ID for '{activity_name}': {e}")
-            return None
-
-    def get_custom_fields(self) -> List[Dict]:
-        """
-        Get all available custom fields
-
-        Returns:
-            List[Dict]: List of custom fields with id, name, and other properties
-        """
-        try:
-            custom_fields = []
-            redmine_custom_fields = self.redmine.custom_field.all()
-
-            for field in redmine_custom_fields:
-                custom_fields.append(
-                    {
-                        "id": field.id,
-                        "name": field.name,
-                        "customized_type": getattr(field, "customized_type", ""),
-                        "field_format": getattr(field, "field_format", ""),
-                        "possible_values": getattr(field, "possible_values", []),
-                        "is_required": getattr(field, "is_required", False),
-                        "default_value": getattr(field, "default_value", ""),
-                    }
-                )
-
-            logger.info(f"Retrieved {len(custom_fields)} custom fields")
-            return custom_fields
-
-        except (AuthError, Exception) as e:
-            logger.error(f"Error retrieving custom fields: {e}")
-            return []
-
-    def get_project_custom_fields(self, project_id: int) -> List[Dict]:
-        """
-        Get custom fields for a specific project by examining an existing issue
-
-        Args:
-            project_id (int): Project ID
-
-        Returns:
-            List[Dict]: List of custom fields available for this project
-        """
-        try:
-            # Try to get a recent issue from the project to see what custom fields are available
-            issues = self.redmine.issue.filter(project_id=project_id, limit=1)
-
-            custom_fields = []
-            for issue in issues:
-                if hasattr(issue, "custom_fields"):
-                    for field in issue.custom_fields:
-                        custom_fields.append(
-                            {
-                                "id": field.id,
-                                "name": field.name,
-                                "value": getattr(field, "value", ""),
-                            }
-                        )
-                break  # We only need one issue to get the structure
-
-            logger.info(f"Retrieved {len(custom_fields)} project custom fields")
-            return custom_fields
-
-        except Exception as e:
-            logger.error(f"Error retrieving project custom fields: {e}")
-            return []

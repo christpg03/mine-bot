@@ -169,11 +169,19 @@ async def daily_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
 
             await loading_message.edit_text("🔄 Creando tarea daily en Redmine...")
 
+            # Calculate daily duration in hours for estimated time
+            # At this point we know latest_daily exists and has both start_time and end_time
+            duration_delta = latest_daily.end_time - latest_daily.start_time
+            daily_duration_hours = (
+                duration_delta.total_seconds() / 3600
+            )  # Convert to hours
+
             # Create daily task in Redmine
             daily_task = redmine_service.create_daily_task(
                 project_id=team.redmine_project_id,  # type: ignore
                 team_name=team.team_name,  # type: ignore
                 daily_date=datetime.now(),
+                estimated_time=daily_duration_hours * len(mentioned_usernames),
             )
 
             if not daily_task:
@@ -185,13 +193,6 @@ async def daily_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
             await loading_message.edit_text(
                 "🔄 Buscando usuarios y registrando tiempo..."
             )
-
-            # Calculate daily duration in hours
-            # At this point we know latest_daily exists and has both start_time and end_time
-            duration_delta = latest_daily.end_time - latest_daily.start_time
-            daily_duration_hours = (
-                duration_delta.total_seconds() / 3600
-            )  # Convert to hours
 
             # Format duration for display
             total_minutes = int(duration_delta.total_seconds() / 60)
@@ -259,6 +260,10 @@ async def daily_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
                     )
                 response_parts.append("")
 
+            redmine_service.update_issue_status(
+                issue_id=daily_task["id"], status_name="IN PROGRESS"
+            )
+
             if users_without_token:
                 response_parts.append(f"⚠️ **Usuarios sin token configurado:**")
                 for username in users_without_token:
@@ -278,6 +283,11 @@ async def daily_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
                 for username in not_found_users:
                     response_parts.append(f"   • @{escape_markdown(username)}")
                 response_parts.append("")
+
+            if not (users_without_token or failed_logs or not_found_users):
+                redmine_service.update_issue_status(
+                    issue_id=daily_task["id"], status_name="DONE"
+                )
 
             response_parts.append(
                 f"👤 **Registrado por:** {escape_markdown(str(user.first_name or user.username or 'Usuario'))}"
