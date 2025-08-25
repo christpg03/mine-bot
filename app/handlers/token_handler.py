@@ -1,4 +1,6 @@
 import logging
+import os
+from pathlib import Path
 from telegram import Update
 from telegram.ext import ContextTypes, CommandHandler
 from telegram.constants import ChatType
@@ -30,6 +32,10 @@ async def token_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
 
     # Check if token was provided
     if not args:
+        # Get the project root directory dynamically (works on both Windows and Linux)
+        project_root = Path(__file__).resolve().parent.parent.parent
+        token_images_dir = project_root / "public" / "token"
+
         # Send guide with images on how to get the token
         await update.message.reply_text(
             "🔐 *How to get your Redmine API Token*\n\n"
@@ -39,9 +45,9 @@ async def token_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
 
         # Send first image with instructions
         try:
-            with open(
-                "/home/christian/Documents/Projects/mine-bot/public/token/1.png", "rb"
-            ) as photo1:
+            image1_path = token_images_dir / "1.png"
+
+            with open(image1_path, "rb") as photo1:
                 await update.message.reply_photo(
                     photo=photo1,
                     caption="📋 *Step 1:* Go to your Redmine profile\n"
@@ -53,9 +59,9 @@ async def token_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
 
         # Send second image with instructions
         try:
-            with open(
-                "/home/christian/Documents/Projects/mine-bot/public/token/2.png", "rb"
-            ) as photo2:
+            image2_path = token_images_dir / "2.png"
+
+            with open(image2_path, "rb") as photo2:
                 await update.message.reply_photo(
                     photo=photo2,
                     caption="🔑 *Step 2:* Get your API access key\n"
