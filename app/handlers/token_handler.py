@@ -30,10 +30,47 @@ async def token_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
 
     # Check if token was provided
     if not args:
+        # Send guide with images on how to get the token
         await update.message.reply_text(
-            "❌ Please provide your Redmine API token.\n\n"
-            "Usage: `/token YOUR_REDMINE_TOKEN`\n\n"
-            "ℹ️ You can find your API token in your Redmine profile settings.",
+            "🔐 *How to get your Redmine API Token*\n\n"
+            "Follow these steps to obtain your API token:",
+            parse_mode="Markdown",
+        )
+
+        # Send first image with instructions
+        try:
+            with open(
+                "/home/christian/Documents/Projects/mine-bot/public/token/1.png", "rb"
+            ) as photo1:
+                await update.message.reply_photo(
+                    photo=photo1,
+                    caption="📋 *Step 1:* Go to your Redmine profile\n"
+                    "Click on '*My account*' in the top-right menu",
+                    parse_mode="Markdown",
+                )
+        except Exception as e:
+            logger.warning(f"Could not send first guide image: {e}")
+
+        # Send second image with instructions
+        try:
+            with open(
+                "/home/christian/Documents/Projects/mine-bot/public/token/2.png", "rb"
+            ) as photo2:
+                await update.message.reply_photo(
+                    photo=photo2,
+                    caption="🔑 *Step 2:* Get your API access key\n"
+                    "In the '*API access key*' section, click on '*show*' to reveal your token",
+                    parse_mode="Markdown",
+                )
+        except Exception as e:
+            logger.warning(f"Could not send second guide image: {e}")
+
+        # Send final instructions
+        await update.message.reply_text(
+            "📝 *Step 3:* Copy and send your token\n\n"
+            "Once you have your API token, send it using:\n"
+            "`/token YOUR_REDMINE_TOKEN`\n\n"
+            "⚠️ *Important:* Your token will be deleted immediately after processing for security.",
             parse_mode="Markdown",
         )
         return
