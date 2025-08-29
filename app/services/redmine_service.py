@@ -202,25 +202,53 @@ class RedmineService:
             logger.error(f"Error creating daily task for team {team_name}: {e}")
             return None
 
-    def log_daily(self, issue_id: int, hours: float) -> Optional[Dict]:
+    def log_daily(
+        self, issue_id: int, hours: float, activity_name: Optional[str] = None
+    ) -> Optional[Dict]:
         """
         Log time entry for a daily task in Redmine
 
         Args:
             issue_id (int): Issue ID to log time to
             hours (float): Hours to log
+            activity_name (str, optional): Name of the activity. If None, uses first available activity
 
         Returns:
             Optional[Dict]: Created time entry data or None if failed
         """
         try:
+            # Get activity ID
+            activity_id = None
+            if activity_name:
+                activity_id = self.get_activity_id_by_name(activity_name)
+
+            # If no specific activity or not found, try to find "Meeting" or use first available
+            if activity_id is None:
+                activities = self.get_activities()
+                if not activities:
+                    logger.error("No activities available for time logging")
+                    return None
+
+                # Try to find "Meeting" activity first
+                for activity in activities:
+                    if "meeting" in activity["name"].lower():
+                        activity_id = activity["id"]
+                        break
+
+                # If no meeting activity found, use the first one
+                if activity_id is None:
+                    activity_id = activities[0]["id"]
+                    logger.info(
+                        f"Using first available activity: {activities[0]['name']} (ID: {activity_id})"
+                    )
+
             # Create time entry
             time_entry = self.redmine.time_entry.create(
                 issue_id=issue_id,
                 spent_on=datetime.now().date(),
                 hours=hours,
                 comments="Daily",
-                activity_id=9,  # Meeting activity (usually ID 9, may vary by Redmine configuration)
+                activity_id=activity_id,
             )
 
             logger.info(f"Time entry logged successfully with ID: {time_entry.id}")
@@ -232,6 +260,7 @@ class RedmineService:
                 "hours": time_entry.hours,
                 "comments": time_entry.comments,
                 "activity_id": time_entry.activity.id,
+                "activity_name": time_entry.activity.name,
             }
 
         except (ResourceNotFoundError, AuthError, Exception) as e:
@@ -324,6 +353,52 @@ class RedmineService:
 
         except Exception as e:
             logger.error(f"Error getting status ID for '{status_name}': {e}")
+            return None
+
+    def get_activities(self) -> List[Dict]:
+        """
+        Get all available time entry activities
+
+        Returns:
+            List[Dict]: List of activities with id and name
+        """
+        try:
+            activities = []
+            redmine_activities = self.redmine.enumeration.filter(
+                resource="time_entry_activities"
+            )
+
+            for activity in redmine_activities:
+                activities.append({"id": activity.id, "name": activity.name})
+
+            logger.info(f"Retrieved {len(activities)} time entry activities")
+            return activities
+
+        except (AuthError, Exception) as e:
+            logger.error(f"Error retrieving time entry activities: {e}")
+            return []
+
+    def get_activity_id_by_name(self, activity_name: str) -> Optional[int]:
+        """
+        Get activity ID by name
+
+        Args:
+            activity_name (str): Name of the activity
+
+        Returns:
+            Optional[int]: Activity ID or None if not found
+        """
+        try:
+            activities = self.get_activities()
+            for activity in activities:
+                if activity["name"].lower() == activity_name.lower():
+                    return activity["id"]
+
+            logger.warning(f"Activity '{activity_name}' not found")
+            return None
+
+        except Exception as e:
+            logger.error(f"Error getting activity ID for '{activity_name}': {e}")
             return None
 
     def update_issue_status(self, issue_id: int, status_name: str) -> Optional[Dict]:

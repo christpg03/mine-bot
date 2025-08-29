@@ -60,6 +60,17 @@ def test_create_daily():
     else:
         print("❌ No se encontraron estados")
 
+    # Get available activities
+    print("\n⚡ Obteniendo actividades disponibles...")
+    activities = redmine_service.get_activities()
+
+    if activities:
+        print(f"✅ Encontradas {len(activities)} actividades:")
+        for activity in activities:
+            print(f"  • {activity['name']} (ID: {activity['id']})")
+    else:
+        print("❌ No se encontraron actividades")
+
     # Get available projects
     print("\n📋 Obteniendo proyectos disponibles...")
     projects = redmine_service.get_projects()
@@ -135,7 +146,37 @@ def test_create_daily():
         except ValueError:
             hours = 1.5
 
-        time_entry = redmine_service.log_daily(issue_id=task_data["id"], hours=hours)
+        # Show available activities and let user choose
+        if activities:
+            print("\nActividades disponibles:")
+            for i, activity in enumerate(activities):
+                print(f"  {i+1}. {activity['name']}")
+
+            activity_choice = input(
+                "\nSelecciona el número de la actividad (o presiona Enter para usar automático): "
+            ).strip()
+
+            activity_name = None
+            if activity_choice and activity_choice.isdigit():
+                try:
+                    activity_index = int(activity_choice) - 1
+                    if 0 <= activity_index < len(activities):
+                        activity_name = activities[activity_index]["name"]
+                        print(f"Usando actividad: {activity_name}")
+                    else:
+                        print("Selección inválida, usando actividad automática")
+                except ValueError:
+                    print("Selección inválida, usando actividad automática")
+            else:
+                print("Usando actividad automática (Meeting o la primera disponible)")
+
+            time_entry = redmine_service.log_daily(
+                issue_id=task_data["id"], hours=hours, activity_name=activity_name
+            )
+        else:
+            time_entry = redmine_service.log_daily(
+                issue_id=task_data["id"], hours=hours
+            )
 
         if time_entry:
             print("✅ Tiempo logueado exitosamente!")
@@ -143,6 +184,9 @@ def test_create_daily():
             print(f"   Horas: {time_entry['hours']}")
             print(f"   Fecha: {time_entry['spent_on']}")
             print(f"   Comentarios: {time_entry['comments']}")
+            print(
+                f"   Actividad: {time_entry.get('activity_name', 'N/A')} (ID: {time_entry['activity_id']})"
+            )
         else:
             print("❌ Error al loguear tiempo")
 
